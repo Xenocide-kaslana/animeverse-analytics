@@ -13,7 +13,7 @@ AnimeVerse Analytics adalah aplikasi dashboard berbasis Streamlit untuk mengeksp
 
 ## Link Dashboard
 
-- Dashboard Streamlit: `[Dapat ditambahkan setelah proses deployment]`
+- Dashboard Streamlit: [Belum tersedia; tambahkan URL deployment aktif di sini]
 
 Link deployment belum tersedia dan tidak dibuat dalam dokumentasi ini.
 
@@ -61,15 +61,15 @@ Tujuan pengembangan AnimeVerse Analytics adalah menyediakan dashboard yang:
 
 ## Insight Utama Berdasarkan Analisis Aktual
 
-Berikut ringkasan hasil aktual dari dataset tanpa filter:
+Berikut ringkasan hasil aktual dashboard pada tampilan awal dengan rentang tahun 1917–2026:
 
-1. **Jenis anime paling banyak adalah TV**, dengan 5.449 judul dari 20.000 anime.
+1. **Jenis anime paling banyak adalah TV**, dengan 5.410 judul dari 19.061 anime yang memiliki tahun rilis.
 2. **Tahun produksi terbanyak adalah 2021**, dengan 866 judul anime.
-3. **Genre paling sering muncul adalah Comedy**, pada 5.949 judul anime.
-4. **Studio dengan produksi terbanyak adalah Toei Animation**, dengan 819 judul anime.
-5. **Genre dengan rata-rata skor MAL tertinggi pada sampel minimal 30 judul adalah Iyashikei**, dengan rata-rata 7,44 dari 174 judul.
+3. **Genre paling sering muncul adalah Comedy**, pada 5.778 judul anime.
+4. **Studio dengan produksi terbanyak adalah Toei Animation**, dengan 801 judul anime.
+5. **Genre dengan rata-rata skor MAL tertinggi pada sampel minimal 30 judul adalah Award Winning**, dengan rata-rata 7,50 dari 210 judul.
 
-Analisis korelasi menunjukkan hubungan linear positif antara `mal_score` dan `mal_members` sebesar 0,378 pada 20.000 anime. Nilai korelasi tersebut tidak membuktikan hubungan sebab-akibat.
+Analisis korelasi menunjukkan hubungan linear positif antara `mal_score` dan `mal_members` sebesar 0,382 pada 19.061 anime yang memiliki tahun rilis dan nilai kedua metrik. Nilai korelasi tersebut tidak membuktikan hubungan sebab-akibat.
 
 ## Fitur Dashboard
 
@@ -194,3 +194,12 @@ Hasil validasi dataset:
 - Studio valid unik: 1.243.
 - Genre unik: 78.
 - Anime tanpa tahun rilis: 939.
+
+## Nilai yang Ditampilkan pada Tampilan Awal Dashboard
+
+Filter tahun aktif secara bawaan untuk rentang 1917–2026. Oleh karena itu, baris yang tidak memiliki tahun rilis tidak termasuk dalam tampilan awal:
+
+- Jumlah anime pada tampilan awal: 19.061.
+- Rata-rata skor MAL pada tampilan awal: 6,47.
+- Rata-rata anggota MAL pada tampilan awal: 62.432.
+- Studio valid pada tampilan awal: 1.223.
