@@ -1,0 +1,57 @@
+from __future__ import annotations
+
+import plotly.graph_objects as go
+import plotly.io as pio
+import streamlit as st
+from src.localization import t
+
+
+COLORS = {
+    "navy": "#17152B",
+    "secondary_dark": "#211E38",
+    "violet": "#8B5CF6",
+    "lavender": "#A78BFA",
+    "light": "#F8FAFC",
+    "white": "#FFFFFF",
+    "text": "#1E293B",
+    "success": "#10B981",
+    "warning": "#F59E0B",
+}
+
+
+def initialize_theme() -> str:
+    if "animeverse_theme" not in st.session_state:
+        st.session_state["animeverse_theme"] = "Light"
+    return st.session_state["animeverse_theme"]
+
+
+def render_theme_switcher() -> str:
+    theme = st.sidebar.radio(
+        t("Appearance"),
+        [t("Light"), t("Dark")],
+        index=0 if st.session_state["animeverse_theme"] == "Light" else 1,
+        horizontal=True,
+        key="theme_switcher",
+    )
+    selected = "Light" if theme == t("Light") else "Dark"
+    st.session_state["animeverse_theme"] = selected
+    return selected
+
+
+def apply_theme(theme: str) -> None:
+    st.session_state["animeverse_theme"] = theme
+
+
+def plotly_template(theme: str) -> dict:
+    dark = theme == "Dark"
+    text = "#E2E8F0" if dark else COLORS["text"]
+    grid = "#34304B" if dark else "#E2E8F0"
+    background = COLORS["navy"] if dark else COLORS["light"]
+    return {
+        "paper_bgcolor": "rgba(0,0,0,0)",
+        "plot_bgcolor": "rgba(0,0,0,0)",
+        "font": {"family": "Inter, sans-serif", "color": text},
+        "xaxis": {"gridcolor": grid, "zerolinecolor": grid, "tickcolor": grid},
+        "yaxis": {"gridcolor": grid, "zerolinecolor": grid, "tickcolor": grid},
+        "background": background,
+    }

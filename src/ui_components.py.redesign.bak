@@ -1,0 +1,227 @@
+from __future__ import annotations
+
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+
+from src.theme import COLORS, plotly_template
+from src.localization import t
+
+
+def brand():
+    st.sidebar.markdown(
+        """
+        <div class="brand-mark">
+          <div class="brand-icon">AV</div>
+          <div>
+            <div class="brand-name">AnimeVerse</div>
+            <div class="brand-subtitle">Analytics</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def page_header(title: str, subtitle: str, eyebrow: str = "Inteligensi Industri Anime"):
+    st.markdown(f'<div class="eyebrow">{eyebrow}</div>', unsafe_allow_html=True)
+    st.title(title)
+    st.caption(subtitle)
+
+
+def kpi_card(label: str, value: str, detail: str = "", key: str = "") -> None:
+    st.markdown(
+        f"""
+        <div class="kpi-card" {('id="' + key + '"') if key else ""}>
+          <div class="kpi-label">{label}</div>
+          <div class="kpi-value">{value}</div>
+          <div class="kpi-detail">{detail}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def section_header(title: str, description: str = "") -> None:
+    st.markdown(
+        f"""
+        <div class="section-header">
+          <h2>{title}</h2>
+          {f'<p>{description}</p>' if description else ''}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def chart_container(title: str, subtitle: str = "", fig: go.Figure | None = None, key: str = "") -> None:
+    st.markdown(
+        f"""
+        <div class="chart-card">
+          <div class="chart-heading">
+            <div class="chart-title">{title}</div>
+            <div class="chart-subtitle">{subtitle}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if fig is not None:
+        st.plotly_chart(fig, width="stretch", key=key or None)
+
+
+def filter_container(title: str = "Filter Utama"):
+    st.markdown(f'<div class="filter-heading">{title}</div>', unsafe_allow_html=True)
+
+
+def insight_card(title: str, text: str, tone: str = "violet") -> None:
+    tone_class = "insight-success" if tone == "success" else "insight-warning" if tone == "warning" else ""
+    st.markdown(
+        f'<div class="insight-card {tone_class}"><div class="insight-title">{title}</div>'
+        f'<div class="insight-text">{text}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def empty_state(title: str = "Data Tidak Tersedia", description: str = "Sesuaikan filter untuk melihat hasil.") -> None:
+    st.markdown(
+        f'<div class="empty-state"><div class="empty-title">{title}</div><div>{description}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def loading_state(message: str = "Memuat analitik...") -> None:
+    st.markdown(f'<div class="loading-state"><span class="loading-dot"></span>{message}</div>', unsafe_allow_html=True)
+
+
+def data_table(
+    df: pd.DataFrame,
+    page_size: int = 10,
+    key_prefix: str = "data_table",
+    columns: list[str] | None = None,
+):
+    if df.empty:
+        empty_state("Tidak Ada Data")
+        return
+    display = df if columns is None else df[columns]
+    page_count = max(1, (len(display) + page_size - 1) // page_size)
+    page = st.number_input(
+        "Page",
+        min_value=1,
+        max_value=page_count,
+        value=1,
+        key=f"{key_prefix}_page",
+    )
+    start = (int(page) - 1) * page_size
+    st.dataframe(display.iloc[start:start + page_size], width="stretch", hide_index=True)
+    st.caption(f"Menampilkan {start + 1}-{min(start + page_size, len(display))} dari {len(display):,}".replace(",", ".") + " data")
+
+
+def csv_download(df: pd.DataFrame, filename: str, key: str) -> None:
+    if df.empty:
+        return
+    st.download_button(
+        t("Download CSV"),
+        data=df.to_csv(index=False).encode("utf-8-sig"),
+        file_name=filename,
+        mime="text/csv;charset=utf-8-sig",
+        key=key,
+        width="stretch",
+    )
+
+
+def interactive_data_table(
+    df: pd.DataFrame,
+    key_prefix: str,
+    page_size: int = 10,
+    default_sort: str | None = None,
+    default_columns: list[str] | None = None,
+) -> pd.DataFrame:
+    if df.empty:
+        empty_state("Tidak Ada Data")
+        return df
+
+    searchable = df.astype("object").fillna("").astype(str).agg(" ".join, axis=1)
+    query = st.text_input(t("Search table"), key=f"{key_prefix}_search")
+    columns = default_columns or list(df.columns)
+    sort_options = [column for column in columns if column in df.columns]
+    selected_sort = st.selectbox(
+        t("Sort By"),
+        sort_options,
+        index=sort_options.index(default_sort) if default_sort in sort_options else 0,
+        key=f"{key_prefix}_sort",
+    )
+    ascending = st.toggle("Ascending", False, key=f"{key_prefix}_ascending")
+
+    result = df.copy()
+    if query.strip():
+        mask = searchable.str.contains(query.strip(), case=False, na=False)
+        result = result.loc[mask.reindex(result.index, fill_value=False)]
+    if selected_sort in result.columns:
+        result = result.sort_values(selected_sort, ascending=ascending, na_position="last")
+
+    csv_download(result, f"{key_prefix}_export.csv", f"{key_prefix}_csv")
+    data_table(result, page_size=page_size, key_prefix=key_prefix, columns=columns)
+    return result
+
+
+def anime_search(df: pd.DataFrame, key_prefix: str = "global_anime_search") -> pd.DataFrame:
+    query = st.text_input(
+        t("Search Anime"),
+        placeholder="Judul Inggris, Romaji, atau Jepang",
+        key=f"{key_prefix}_query",
+    ).strip()
+    if not query:
+        return pd.DataFrame(columns=df.columns)
+
+    title_columns = [column for column in ["title_english", "title_romaji", "title_japanese"] if column in df.columns]
+    mask = pd.Series(False, index=df.index)
+    for column in title_columns:
+        mask |= df[column].fillna("").astype(str).str.contains(query, case=False, regex=False)
+    result = df.loc[mask]
+    if result.empty:
+        empty_state(t("No Results Found"), "Coba judul Inggris, Romaji, atau Jepang yang berbeda.")
+    else:
+        st.caption(f"{len(result):,}".replace(",", ".") + " hasil pencarian")
+    return result
+
+
+def anime_detail(anime: pd.Series) -> None:
+    def value(column: str):
+        if column not in anime.index or pd.isna(anime[column]) or str(anime[column]).strip() == "":
+            return "Tidak tersedia"
+        return anime[column]
+
+    image_url = value("image_url")
+    left, right = st.columns([1, 2])
+    with left:
+        if image_url != "Tidak tersedia" and str(image_url).startswith(("http://", "https://")):
+            st.image(image_url, width="stretch", caption="Poster anime")
+        else:
+            empty_state(t("No Image Available"), "URL gambar tidak tersedia atau tidak valid.")
+    with right:
+        st.subheader(str(value("title_english")))
+        st.caption(f"{t('Romaji Title')}: {value('title_romaji')}")
+        st.caption(f"{t('Japanese Title')}: {value('title_japanese')}")
+        synopsis = value("synopsis")
+        st.write(synopsis if synopsis != "Tidak tersedia" else "Tidak tersedia")
+
+    fields = {
+        "Jenis Anime": value("type"),
+        "Tahun Rilis": value("year"),
+        "Musim Tayang": value("season"),
+        "Studio": value("studio_main"),
+        "Genre": ", ".join(anime["genre_list"]) if isinstance(anime.get("genre_list"), list) and anime["genre_list"] else "Tidak tersedia",
+        "Skor MAL": value("mal_score"),
+        "Skor AniList": value("anilist_score"),
+        "Jumlah Anggota MAL": value("mal_members"),
+        t("Favorites"): value("mal_favorites"),
+        t("Episode Count"): value("episodes"),
+        "Durasi (menit)": value("duration_min"),
+        t("Streaming Platforms"): value("streaming_platforms"),
+    }
+    columns = st.columns(3)
+    for index, (label, field_value) in enumerate(fields.items()):
+        with columns[index % 3]:
+            st.markdown(f"**{label}**")
+            st.write(field_value)

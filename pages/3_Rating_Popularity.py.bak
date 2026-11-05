@@ -1,0 +1,75 @@
+import streamlit as st
+
+from src.analytics import (
+    mal_score_distribution, mal_vs_anilist_comparison, popularity_tier_distribution,
+    top_anime_by_favorites, top_anime_by_members, top_anime_by_mal_score,
+)
+from src.charts import bar_chart, histogram, scatter
+from src.ui_components import chart_container, page_header, section_header
+
+
+def render(df, theme):
+    with st.container():
+        page_header("Rating & Popularitas", "Analisis terpisah untuk skor MAL/AniList, jumlah audiens, favorit, dan kategori popularitas.")
+    min_members = st.slider("Jumlah anggota MAL minimum untuk peringkat skor", 0, 1000000, 1000, 10000, key="rating_min_members")
+    ranking_metric = st.selectbox(
+        "Ukuran peringkat",
+        ["Skor MAL", "Jumlah Anggota MAL", "Favorit MAL", "Popularitas", "Peringkat MAL"],
+        key="rating_ranking_metric",
+    )
+    ranking_columns = {
+        "Skor MAL": "mal_score",
+        "Jumlah Anggota MAL": "mal_members",
+        "Favorit MAL": "mal_favorites",
+        "Popularitas": "mal_popularity",
+        "Peringkat MAL": "mal_rank",
+    }
+    ranking_column = ranking_columns[ranking_metric]
+    ranking = df.dropna(subset=[ranking_column]).copy()
+    if ranking_metric == "Skor MAL":
+        ranking = ranking.loc[ranking["mal_members"].ge(min_members)]
+    ascending = ranking_metric in {"Popularitas", "Peringkat MAL"}
+    ranking = ranking.sort_values(
+        [ranking_column, "mal_score", "mal_id"],
+        ascending=[ascending, False, True],
+    ).head(10)
+
+    section_header("Peringkat")
+    tabs = st.tabs(["Peringkat Terpilih", "Jumlah Anggota MAL", "Favorit"])
+    with tabs[0]:
+        chart_container(f"Anime Teratas Berdasarkan {ranking_metric}", f"Minimum {min_members:,} anggota MAL".replace(",", ".") if ranking_metric == "Skor MAL" else "")
+        st.dataframe(ranking, width="stretch", hide_index=True)
+    with tabs[1]:
+        chart_container("Anime Teratas Berdasarkan Jumlah Anggota MAL")
+        st.dataframe(top_anime_by_members(df, 10), width="stretch", hide_index=True)
+    with tabs[2]:
+        chart_container("Anime Teratas Berdasarkan Favorit")
+        st.dataframe(top_anime_by_favorites(df, 10), width="stretch", hide_index=True)
+
+    section_header("Analisis Skor dan Popularitas")
+    left, right = st.columns(2)
+    with left:
+        chart_container("Distribusi Skor MAL", "Skor MAL yang tersedia")
+        st.plotly_chart(histogram(df, "mal_score", theme, "Distribusi Skor MAL"), width="stretch", key="rating_mal_hist")
+    with right:
+        popularity = popularity_tier_distribution(df)
+        chart_container("Distribusi Kategori Popularitas", "Kategori popularitas pada dataset")
+        st.plotly_chart(bar_chart(popularity, "popularity_tier", "anime_count", theme), width="stretch", key="rating_popularity_chart")
+
+    left, right = st.columns(2)
+    with left:
+        chart_container("Skor MAL vs Jumlah Anggota MAL", "Setiap titik mewakili satu anime")
+        st.plotly_chart(scatter(df, "mal_members", "mal_score", theme, hover_name="title_english"), width="stretch", key="rating_scatter")
+    with right:
+        comparison = mal_vs_anilist_comparison(df).melt(
+            id_vars=["mal_id", "title_english"],
+            value_vars=["mal_score", "anilist_score"],
+            var_name="Sumber",
+            value_name="Skor",
+        )
+        chart_container("Perbandingan Skor MAL dan AniList", "Skor berpasangan yang tersedia; kedua sumber tetap terpisah")
+        st.plotly_chart(
+            histogram(comparison.rename(columns={"Skor": "skor_mal_anilist"}), "skor_mal_anilist", theme, nbins=40),
+            width="stretch",
+            key="rating_source_compare",
+        )

@@ -1,0 +1,207 @@
+from pathlib import Path
+from importlib import import_module
+
+import pandas as pd
+import streamlit as st
+
+from src.analytics import load_clean_data
+from src.config import PROCESSED_DATA_PATH
+from src.localization import t
+from src.data_filters import apply_anime_filters
+from src.theme import initialize_theme, render_theme_switcher
+from src.ui_components import (
+    anime_detail,
+    anime_search,
+    brand,
+    csv_download,
+    empty_state,
+    filter_container,
+    page_header,
+)
+executive_page = import_module("pages.1_Executive_Overview")
+trends_page = import_module("pages.2_Anime_Trends")
+rating_page = import_module("pages.3_Rating_Popularity")
+studio_page = import_module("pages.4_Studio_Genre")
+streaming_page = import_module("pages.5_Streaming_Analysis")
+
+
+ROOT = Path(__file__).resolve().parent
+CSS_PATH = ROOT / "assets" / "style.css"
+
+PAGES = {
+    "Ringkasan Utama": "📊",
+    "Tren Anime": "📈",
+    "Rating & Popularitas": "⭐",
+    "Studio & Genre": "🎬",
+    "Analisis Platform Streaming": "▶️",
+}
+
+
+@st.cache_data
+def load_foundation_data():
+    if not PROCESSED_DATA_PATH.exists():
+        raise FileNotFoundError(
+            f"Dataset hasil olahan tidak ditemukan di {PROCESSED_DATA_PATH}. Jalankan scripts/clean_dataset.py."
+        )
+    return load_clean_data(PROCESSED_DATA_PATH)
+
+
+def local_css():
+    if CSS_PATH.exists():
+        st.markdown(f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>", unsafe_allow_html=True)
+
+
+def render_sidebar():
+    brand()
+    st.sidebar.markdown('<div class="nav-label">Navigasi Utama</div>', unsafe_allow_html=True)
+    return st.sidebar.radio(
+        "Navigasi",
+        list(PAGES.keys()),
+        format_func=lambda name: f"{PAGES[name]}  {name}",
+        key="global_navigation",
+        label_visibility="collapsed",
+    )
+
+
+def render_filters(df: pd.DataFrame):
+    with st.sidebar:
+        filter_container()
+        years = sorted(df["year"].dropna().astype(int).unique())
+        available_year_min = int(min(years))
+        available_year_max = int(max(years))
+        st.slider(
+            t("Release Year"),
+            min_value=available_year_min,
+            max_value=available_year_max,
+            value=(available_year_min, available_year_max),
+            key="global_year_range",
+        )
+        st.multiselect(
+            t("Anime Type"),
+            sorted(df["type"].dropna().unique()),
+            key="global_anime_types",
+        )
+        st.multiselect(
+            t("Season"),
+            sorted(df["season"].dropna().unique()),
+            key="global_seasons",
+        )
+        genres = sorted({genre for values in df["genre_list"].dropna() for genre in values})
+        st.multiselect(t("Genre"), genres, key="global_genres")
+        valid_studios = sorted({
+            str(studio).strip()
+            for studio in df["studio_main"].dropna()
+            if str(studio).strip() and str(studio).strip().lower() != "unknown"
+        })
+        st.multiselect(t("Studio"), valid_studios, key="global_studios")
+        score_tiers = sorted(df["score_tier"].dropna().unique())
+        st.multiselect("Kategori Skor", score_tiers, key="global_score_tiers")
+        popularity_tiers = sorted(df["popularity_tier"].dropna().unique())
+        st.multiselect("Kategori Popularitas", popularity_tiers, key="global_popularity_tiers")
+        if st.button(t("Reset Filters"), width="stretch", key="global_reset_filters", on_click=reset_global_filters,
+                     args=(available_year_min, available_year_max)):
+            pass
+
+
+def reset_global_filters(year_min: int, year_max: int):
+    st.session_state["global_year_range"] = (year_min, year_max)
+    st.session_state["global_anime_types"] = []
+    st.session_state["global_seasons"] = []
+    st.session_state["global_genres"] = []
+    st.session_state["global_studios"] = []
+    st.session_state["global_score_tiers"] = []
+    st.session_state["global_popularity_tiers"] = []
+
+
+def apply_global_filters(df: pd.DataFrame) -> pd.DataFrame:
+    year_range = st.session_state.get("global_year_range")
+    return apply_anime_filters(
+        df,
+        year_range=year_range,
+        anime_types=st.session_state.get("global_anime_types", []),
+        seasons=st.session_state.get("global_seasons", []),
+        genres=st.session_state.get("global_genres", []),
+        studios=st.session_state.get("global_studios", []),
+        score_tiers=st.session_state.get("global_score_tiers", []),
+        popularity_tiers=st.session_state.get("global_popularity_tiers", []),
+    )
+
+
+st.set_page_config(
+    page_title="AnimeVerse Analytics",
+    page_icon="assets/logo.png" if (ROOT / "assets" / "logo.png").exists() else "AV",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+local_css()
+initialize_theme()
+
+selected_page = render_sidebar()
+active_theme = render_theme_switcher()
+
+st.markdown(
+    f"""
+    <style>
+      [data-testid="stApp"] {{
+        background: {"#17152B" if active_theme == "Dark" else "#F8FAFC"} !important;
+      }}
+    </style>
+    <script>
+      const root = window.parent.document.querySelector('[data-testid="stApp"]');
+      if (root) {{
+        root.classList.toggle("dark-theme", {"true" if active_theme == "Dark" else "false"});
+      }}
+    </script>
+    """,
+    unsafe_allow_html=True,
+)
+
+try:
+    df = load_foundation_data()
+    render_filters(df)
+    filtered_df = apply_global_filters(df)
+    with st.sidebar:
+        csv_download(filtered_df, "animeverse_filtered.csv", "global_filtered_csv")
+    if filtered_df.empty:
+        page_header("Tidak Ada Data", "Tidak ada data yang sesuai dengan kombinasi filter ini.")
+        empty_state(
+            "Tidak ada data yang sesuai",
+            "Ubah atau atur ulang filter untuk menampilkan anime kembali.",
+        )
+        st.stop()
+    search_results = anime_search(filtered_df)
+    if not search_results.empty:
+        options = search_results.apply(
+            lambda row: f"{row.get('title_english', 'Tidak tersedia')} - {row.get('type', 'Tidak tersedia')}",
+            axis=1,
+        )
+        selected_label = st.selectbox(
+            t("Select anime"),
+            options.tolist(),
+            key="global_anime_detail_selection",
+        )
+        selected_index = options.index[options.eq(selected_label)][0]
+        with st.expander(t("Anime Details"), expanded=True):
+            anime_detail(search_results.loc[selected_index])
+
+    if selected_page == "Ringkasan Utama":
+        executive_page.render(filtered_df, active_theme)
+    elif selected_page == "Tren Anime":
+        trends_page.render(filtered_df, active_theme)
+    elif selected_page == "Rating & Popularitas":
+        rating_page.render(filtered_df, active_theme)
+    elif selected_page == "Studio & Genre":
+        studio_page.render(filtered_df, active_theme)
+    else:
+        streaming_page.render(filtered_df, active_theme)
+except FileNotFoundError as error:
+    page_header(    "Data tidak tersedia", "Dashboard tidak dapat memuat dataset hasil olahan.")
+    empty_state("Data hasil olahan tidak ditemukan", str(error))
+except Exception as error:
+    page_header("Terjadi Kesalahan Dashboard", "Terjadi kesalahan yang tidak terduga saat memuat aplikasi.")
+    st.error(f"{type(error).__name__}: {error}")
+
+st.markdown(
+    '<div class="app-footer">AnimeVerse Analytics · Anime Industry &amp; Popularity Intelligence</div>',
+    unsafe_allow_html=True,
+)

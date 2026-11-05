@@ -1,0 +1,78 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+
+import numpy as np
+import pandas as pd
+
+
+def _selected_list(value) -> list:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set, np.ndarray, pd.Series, pd.Index)):
+        return list(value)
+    return [value]
+
+
+def contains_genre(values, selected_genres: Iterable[str]) -> bool:
+    selected = set(_selected_list(selected_genres))
+    if selected_genres is None:
+        return False
+    if isinstance(values, (list, tuple, set, np.ndarray, pd.Series, pd.Index)):
+        if hasattr(values, "tolist"):
+            values = values.tolist()
+        else:
+            values = list(values)
+        available = {str(value) for value in values if value is not None and not pd.isna(value)}
+        return bool(selected & available)
+    if pd.isna(values):
+        return False
+    return str(values) in selected
+
+
+def apply_anime_filters(
+    df: pd.DataFrame,
+    *,
+    year_range: tuple[int, int] | None = None,
+    anime_types: Iterable[str] | None = None,
+    seasons: Iterable[str] | None = None,
+    genres: Iterable[str] | None = None,
+    studios: Iterable[str] | None = None,
+    score_tiers: Iterable[str] | None = None,
+    popularity_tiers: Iterable[str] | None = None,
+) -> pd.DataFrame:
+    filtered = df.copy()
+
+    if year_range is not None:
+        years = pd.to_numeric(filtered["year"], errors="coerce")
+        in_range = years.between(int(year_range[0]), int(year_range[1]))
+        filtered = filtered.loc[filtered["year"].isna() | in_range]
+
+    selected_types = _selected_list(anime_types)
+    if selected_types:
+        filtered = filtered.loc[filtered["type"].isin(selected_types)]
+
+    selected_seasons = _selected_list(seasons)
+    if selected_seasons:
+        filtered = filtered.loc[filtered["season"].isin(selected_seasons)]
+
+    selected_genres = _selected_list(genres)
+    if selected_genres:
+        mask = filtered["genre_list"].map(
+            lambda values: contains_genre(values, selected_genres)
+        )
+        filtered = filtered.loc[mask.fillna(False)]
+
+    selected_studios = _selected_list(studios)
+    if selected_studios:
+        filtered = filtered.loc[filtered["studio_main"].isin(selected_studios)]
+
+    selected_score_tiers = _selected_list(score_tiers)
+    if selected_score_tiers:
+        filtered = filtered.loc[filtered["score_tier"].isin(selected_score_tiers)]
+
+    selected_popularity_tiers = _selected_list(popularity_tiers)
+    if selected_popularity_tiers:
+        filtered = filtered.loc[filtered["popularity_tier"].isin(selected_popularity_tiers)]
+
+    return filtered.reset_index(drop=True)
