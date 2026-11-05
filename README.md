@@ -13,7 +13,7 @@ AnimeVerse Analytics adalah aplikasi dashboard berbasis Streamlit untuk mengeksp
 
 ## Link Dashboard
 
-- Dashboard Streamlit: [Belum tersedia; tambahkan URL deployment aktif di sini]
+- Dashboard Streamlit: https://animeverse-analytics-rapi.streamlit.app/
 
 Link deployment belum tersedia dan tidak dibuat dalam dokumentasi ini.
 
